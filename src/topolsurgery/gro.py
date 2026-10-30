@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
 
 @dataclass(frozen=True)
@@ -66,7 +66,7 @@ class GroFile:
         object.__setattr__(self, "box", box)
 
     @classmethod
-    def read(cls, path: str | Path) -> "GroFile":
+    def read(cls, path: str | Path) -> GroFile:
         """Read a GROMACS ``.gro`` file.
 
         Parameters
@@ -111,7 +111,7 @@ class GroFile:
             raise ValueError(f"{source}:{atom_count + 3}: box must have 3 or 9 values")
         return cls(title=lines[0], atoms=atoms, box=box)
 
-    def select(self, atom_numbers: Sequence[int]) -> "GroFile":
+    def select(self, atom_numbers: Sequence[int]) -> GroFile:
         """Return a coordinate subset using the same 1-based numbering.
 
         Parameters
@@ -216,7 +216,9 @@ def _parse_atom_line(line: str, path: Path, atom_index: int) -> GroAtom:
     except (ValueError, IndexError):
         fields = line.split()
         if len(fields) not in (7, 10):
-            raise ValueError(f"{path}:{atom_index + 2}: malformed GRO atom record")
+            raise ValueError(
+                f"{path}:{atom_index + 2}: malformed GRO atom record"
+            ) from None
         residue_number = int(fields[0])
         residue_name = fields[1]
         atom_name = fields[2]

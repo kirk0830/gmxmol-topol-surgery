@@ -1,5 +1,3 @@
-include AGENTS.md
+include LICENSE
 include README.md
-include REVIEW.md
-include REVIEW_STATUS.md
 recursive-include tests *.py *.mdp

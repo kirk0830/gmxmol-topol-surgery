@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from numbers import Integral, Real
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, Mapping, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 if TYPE_CHECKING:
     from topolsurgery.graph import AtomicGraph
@@ -490,7 +491,7 @@ class TopologySnapshot:
         return len(self.atoms)
 
     @property
-    def graph(self) -> "AtomicGraph":
+    def graph(self) -> AtomicGraph:
         """Return chemical connectivity, including implicit SETTLE edges."""
         from topolsurgery.graph import AtomicGraph
 
@@ -599,9 +600,9 @@ class SurgeryWarning:
 class _TopologyResultMixin:
     """Read-only behavior shared by topology operation results."""
 
-    components: tuple["Component", ...]
+    components: tuple[Component, ...]
     _top: Any
-    _gro: "GroFile | None"
+    _gro: GroFile | None
     _bond_orders: Mapping[tuple[int, int], int]
 
     @property
@@ -615,7 +616,7 @@ class _TopologyResultMixin:
         return _snapshot_result_topology(self._top, self._bond_orders)
 
     @property
-    def graph(self) -> "AtomicGraph":
+    def graph(self) -> AtomicGraph:
         """Return the result topology's connectivity graph."""
         return self.topology.graph
 
@@ -652,11 +653,11 @@ class AtomRemovalResult(_TopologyResultMixin):
     requested_atoms: tuple[int, ...]
     removed_atoms: tuple[AtomSpec, ...]
     index_map: IndexMap
-    components: tuple["Component", ...]
+    components: tuple[Component, ...]
     warnings: tuple[SurgeryWarning, ...] = ()
     edit: TopologyEdit | None = None
     operation: Literal["remove_atoms"] = "remove_atoms"
-    _gro: "GroFile | None" = field(default=None, repr=False, compare=False)
+    _gro: GroFile | None = field(default=None, repr=False, compare=False)
     _top: Any = field(default=None, repr=False, compare=False)
     _bond_orders: Mapping[tuple[int, int], int] = field(
         default_factory=dict,
@@ -820,7 +821,7 @@ class SurgeryResult(_TopologyResultMixin):
     warnings: tuple[SurgeryWarning, ...] = ()
     edit: TopologyEdit | None = None
     _top: Any = field(default=None, repr=False, compare=False)
-    _gro: "GroFile | None" = field(default=None, repr=False, compare=False)
+    _gro: GroFile | None = field(default=None, repr=False, compare=False)
     _bond_orders: Mapping[tuple[int, int], int] = field(
         default_factory=dict,
         repr=False,

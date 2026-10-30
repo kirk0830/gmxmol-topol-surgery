@@ -11,7 +11,6 @@ import pytest
 
 from topolsurgery import AtomSpec, InteractionSpec, TopologySurgery
 
-
 PARAMETER_SECTIONS = """\
 [ defaults ]
 1 2 yes 0.5 0.8333

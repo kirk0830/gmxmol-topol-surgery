@@ -25,7 +25,6 @@ Keep these concerns in calling packages:
 ## Read First
 
 - `README.md` defines the public API and examples.
-- `REVIEW_STATUS.md` tracks which reviewed defects are fixed or still open.
 - `src/topolsurgery/graph.py` owns graph connectivity and graph queries.
 - `src/topolsurgery/model.py` owns public immutable data contracts.
 - `src/topolsurgery/surgery.py` owns stateful operations and rollback.
@@ -129,14 +128,20 @@ among multiple same-type templates; require an exact match or caller policy.
 
 ## Testing
 
-Run:
+From a git checkout, `pixi` provides the pinned multi-version dev environments:
 
 ```bash
-python -m pytest -q
+pixi run check          # format check, lint, tests
+pixi run -e py314 test  # oldest/newest matrix locally
 ```
 
-When the host Python lacks `gromologist`, use any project environment that
-provides Python 3.10+, `gromologist`, and `pytest`.
+Without `pixi`, any environment with Python 3.10+, `gromologist`, and
+`pytest` works:
+
+```bash
+python -m pip install -e '.[test]'
+python -m pytest -q
+```
 
 Every behavior change needs a regression test. High-risk changes should
 also cover:

@@ -268,8 +268,10 @@ def test_nonbridge_cut_removes_cmap_without_continuous_path() -> None:
     bonds = ((1, 2), (2, 3), (3, 4), (4, 5), (5, 1))
     surgery = TopologySurgery.from_records(
         atoms,
-        tuple(InteractionSpec("bonds", edge, 1) for edge in bonds)
-        + (InteractionSpec("cmap", (1, 2, 3, 4, 5), 1, (1.0,)),),
+        (
+            *tuple(InteractionSpec("bonds", edge, 1) for edge in bonds),
+            InteractionSpec("cmap", (1, 2, 3, 4, 5), 1, (1.0,)),
+        ),
     )
     surgery.cut_bond(1, 2)
 
@@ -674,7 +676,7 @@ def test_public_record_models_reject_inconsistent_state() -> None:
         TopologyEdit("replace", (1, 2), (), ())
     with pytest.raises(ValueError, match="exactly two"):
         TopologyEdit("cut", (1,), (), ())
-    with pytest.raises(TypeError, match="pathlib.Path"):
+    with pytest.raises(TypeError, match=r"pathlib\.Path"):
         ExportedComponent(
             1,
             "M",
@@ -682,7 +684,7 @@ def test_public_record_models_reject_inconsistent_state() -> None:
             "component.gro",
             Path("component.itp"),
         )
-    with pytest.raises(ValueError, match=".gro suffix"):
+    with pytest.raises(ValueError, match=r"\.gro suffix"):
         ExportedComponent(
             1,
             "M",
@@ -699,7 +701,7 @@ def test_public_record_models_reject_inconsistent_state() -> None:
         Path("component.gro"),
         Path("component.itp"),
     )
-    with pytest.raises(ValueError, match="ordered 1..N"):
+    with pytest.raises(ValueError, match=r"ordered 1\.\.N"):
         ExportResult(
             format="itp",
             components=(

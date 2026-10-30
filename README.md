@@ -28,6 +28,14 @@ python -m pip install -e '.[test]'
 pytest
 ```
 
+The repository also checks in Pixi environments pinned across the supported
+interpreters, so no virtual environment setup is needed:
+
+```bash
+pixi run check           # format check, lint, and tests
+pixi run -e py314 test   # one specific interpreter
+```
+
 After this repository is published, consumers can install a pinned Git tag
 without a local checkout:
 
@@ -856,3 +864,10 @@ TOPOLSURGERY_GMX=/path/to/gmx PYTHONPATH=src python -m pytest -q
   `from_snapshot()` fail instead of returning a lossy topology.
 - `from_records` and export parse through `gromologist`; full MDP validation
   and `grompp` execution are outside this package.
+
+## License
+
+Apache License 2.0; see `LICENSE`.
+
+The one runtime dependency, `gromologist`, is GPLv3-licensed. Review that
+license before redistributing a work that links both packages.

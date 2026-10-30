@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import os
 import re
-from tempfile import TemporaryDirectory
+from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Sequence
+from tempfile import TemporaryDirectory
+from typing import TYPE_CHECKING
 
-from topolsurgery._topology import rewrite_system, subset_molecule
 from topolsurgery._records import snapshot_molecule
+from topolsurgery._topology import rewrite_system, subset_molecule
 from topolsurgery.model import (
     AtomRemovalResult,
-    ExportResult,
     ExportedComponent,
+    ExportResult,
     OutputFormat,
     SurgeryResult,
     TopologySnapshot,
@@ -213,7 +214,7 @@ def component_snapshots(
 def _component_top(
     result: SurgeryResult | AtomRemovalResult,
     atom_numbers: tuple[int, ...],
-) -> "gml.Top":
+) -> gml.Top:
     """Clone the surgery topology and retain one atom component."""
     component_top = result._top.clone()
     molecule = component_top.molecules[0]

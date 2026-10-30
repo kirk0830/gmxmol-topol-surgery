@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import math
 from collections import Counter
+from collections.abc import Mapping, Sequence
 from numbers import Integral, Real
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Mapping, Sequence
 
 import gromologist as gml
 
@@ -31,7 +31,7 @@ def parse_records(
     name: str,
     nrexcl: int,
     parameter_sections: str = "",
-) -> "gml.Top":
+) -> gml.Top:
     """Build a parsed gromologist topology from public atom/interaction rows."""
     text = render_topology_text(
         atoms,
@@ -141,13 +141,14 @@ def _validate_parameter_columns(interaction: InteractionSpec) -> None:
             (),
         )
     )
-    if interaction.parameters:
-        if not expected or len(interaction.parameters) != expected:
-            raise ValueError(
-                f"{interaction.kind} function {interaction.function} "
-                f"expects {expected or 'a known number of'} first-state "
-                f"parameters, got {len(interaction.parameters)}"
-            )
+    if interaction.parameters and (
+        not expected or len(interaction.parameters) != expected
+    ):
+        raise ValueError(
+            f"{interaction.kind} function {interaction.function} "
+            f"expects {expected or 'a known number of'} first-state "
+            f"parameters, got {len(interaction.parameters)}"
+        )
     if interaction.second_parameters and (
         not expected
         or len(interaction.parameters) != expected
@@ -213,7 +214,7 @@ def build_gro(
 
 
 def snapshot_molecule(
-    molecule: "gml.SectionMol",
+    molecule: gml.SectionMol,
     *,
     name: str | None = None,
     bond_orders: Mapping[tuple[int, int], int] | None = None,
@@ -231,7 +232,7 @@ def snapshot_molecule(
                     subsection.header
                     for subsection in molecule.subsections
                     if subsection.header
-                    not in INTERACTION_ORDER + ("moleculetype", "atoms")
+                    not in (*INTERACTION_ORDER, "moleculetype", "atoms")
                 }
             )
         ),
@@ -258,7 +259,7 @@ def snapshot_molecule(
 
 
 def atoms_from_molecule(
-    molecule: "gml.SectionMol",
+    molecule: gml.SectionMol,
 ) -> tuple[AtomSpec, ...]:
     """Convert gromologist atom entries to public atom records."""
     return tuple(
@@ -277,7 +278,7 @@ def atoms_from_molecule(
 
 
 def interactions_from_molecule(
-    molecule: "gml.SectionMol",
+    molecule: gml.SectionMol,
     kind: InteractionKind | None = None,
 ) -> tuple[InteractionSpec, ...]:
     """Convert one or all bonded sections to public interaction records."""
@@ -383,7 +384,7 @@ def _render_interaction(interaction: InteractionSpec) -> str:
 
 def _interaction_from_entry(
     kind: InteractionKind,
-    entry: "gml.EntryBonded",
+    entry: gml.EntryBonded,
 ) -> InteractionSpec:
     """Convert one parsed gromologist interaction entry."""
     function = None if kind == "exclusions" else int(entry.interaction_type)

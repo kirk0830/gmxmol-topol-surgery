@@ -140,6 +140,7 @@ def test_cut_partitions_and_exports_valid_itp_pairs(
         exported.components,
         exported.gro_paths,
         exported.topology_paths,
+        strict=True,
     ):
         gro_lines = gro_path.read_text(encoding="utf-8").splitlines()
         assert gro_lines[1] == str(len(component.atom_numbers))

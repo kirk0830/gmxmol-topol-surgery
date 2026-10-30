@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from functools import wraps
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, Callable, Iterable, Literal, Mapping, Sequence, cast
+from typing import Any, Literal, cast
 
 import gromologist as gml
 
@@ -40,8 +41,8 @@ from topolsurgery._topology import (
     remap_parameter_templates,
     remove_exact_edges,
     remove_settles_intersecting_atoms,
-    rewrite_system,
     resolve_parameter_tables,
+    rewrite_system,
     sanitize_interactions,
     settle_atom_triples,
 )
@@ -79,7 +80,7 @@ def _restore_on_error(
     """Restore the complete session state when a public edit fails."""
 
     @wraps(method)
-    def wrapped(self: "TopologySurgery", *args: Any, **kwargs: Any) -> Any:
+    def wrapped(self: TopologySurgery, *args: Any, **kwargs: Any) -> Any:
         previous_top = self._top.clone()
         previous_bond_orders = dict(self._bond_orders)
         previous_templates = self._parameter_templates
@@ -110,7 +111,7 @@ class TopologySurgery:
 
     def __init__(
         self,
-        topology: "gml.Top",
+        topology: gml.Top,
         structure: GroFile | None = None,
         *,
         bond_orders: Mapping[tuple[int, int], int] | None = None,
@@ -144,7 +145,7 @@ class TopologySurgery:
         gmx_dir: str | Path | None = None,
         bond_orders: Mapping[tuple[int, int], int] | None = None,
         validate_structure: bool = True,
-    ) -> "TopologySurgery":
+    ) -> TopologySurgery:
         """Read a GROMACS topology and coordinate file.
 
         Parameters
@@ -188,12 +189,12 @@ class TopologySurgery:
     @classmethod
     def from_gromologist(
         cls,
-        topology: "gml.Top",
+        topology: gml.Top,
         structure: GroFile | None = None,
         *,
         bond_orders: Mapping[tuple[int, int], int] | None = None,
         validate_structure: bool = True,
-    ) -> "TopologySurgery":
+    ) -> TopologySurgery:
         """Create the public API around an in-memory gromologist topology."""
         return cls(
             topology,
@@ -206,7 +207,7 @@ class TopologySurgery:
     def from_result(
         cls,
         result: SurgeryResult | AtomRemovalResult,
-    ) -> "TopologySurgery":
+    ) -> TopologySurgery:
         """Create an independent session from a completed operation result."""
         if result._top is None:
             raise ValueError("this result has no in-memory topology payload")
@@ -233,7 +234,7 @@ class TopologySurgery:
         box: Sequence[float] = (0.0, 0.0, 0.0),
         parameter_sections: str = "",
         bond_orders: Mapping[tuple[int, int], int] | None = None,
-    ) -> "TopologySurgery":
+    ) -> TopologySurgery:
         """Construct a working topology directly from caller-owned records.
 
         Parameters
@@ -275,7 +276,7 @@ class TopologySurgery:
             ordered_coordinates = tuple(
                 row
                 for _atom, row in sorted(
-                    zip(input_atoms, coordinates),
+                    zip(input_atoms, coordinates, strict=True),
                     key=lambda item: item[0].number,
                 )
             )
@@ -286,7 +287,7 @@ class TopologySurgery:
             ordered_velocities = tuple(
                 row
                 for _atom, row in sorted(
-                    zip(input_atoms, velocities),
+                    zip(input_atoms, velocities, strict=True),
                     key=lambda item: item[0].number,
                 )
             )
@@ -324,7 +325,7 @@ class TopologySurgery:
         box: Sequence[float] = (0.0, 0.0, 0.0),
         parameter_sections: str = "",
         bond_orders: Mapping[tuple[int, int], int] | None = None,
-    ) -> "TopologySurgery":
+    ) -> TopologySurgery:
         """Create an independent session from immutable public records."""
         if snapshot.unsupported_sections or snapshot.lossy_features:
             raise ValueError(
@@ -382,11 +383,11 @@ class TopologySurgery:
             bond_orders=self._bond_orders,
         )
 
-    def to_gromologist(self) -> "gml.Top":
+    def to_gromologist(self) -> gml.Top:
         """Return a defensive clone of the parsed gromologist topology."""
         return self._top.clone()
 
-    def clone(self) -> "TopologySurgery":
+    def clone(self) -> TopologySurgery:
         """Return an independent surgery session at the current state."""
         cloned = type(self)(
             self._top.clone(),
@@ -413,7 +414,7 @@ class TopologySurgery:
             )
         if validate_identity:
             top_atoms = self.atoms
-            for top_atom, gro_atom in zip(top_atoms, structure.atoms):
+            for top_atom, gro_atom in zip(top_atoms, structure.atoms, strict=True):
                 if (
                     top_atom.residue_name != gro_atom.residue_name
                     or top_atom.atom_name != gro_atom.atom_name
@@ -504,14 +505,13 @@ class TopologySurgery:
             if output_top.system:
                 rewrite_system(output_top, molecule_name)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        temporary = NamedTemporaryFile(
+        with NamedTemporaryFile(
             prefix=f".{destination.name}.",
             suffix=f".{output_format}",
             dir=destination.parent,
             delete=False,
-        )
-        temporary_path = Path(temporary.name)
-        temporary.close()
+        ) as temporary:
+            temporary_path = Path(temporary.name)
         committed = False
         try:
             if output_format == "itp":
@@ -859,7 +859,7 @@ class TopologySurgery:
 
     def _insert_connection(
         self,
-        molecule: "gml.SectionMol",
+        molecule: gml.SectionMol,
         edge: tuple[int, int],
         *,
         bond_function: int,
@@ -891,7 +891,7 @@ class TopologySurgery:
 
     def _add_connection_angles(
         self,
-        molecule: "gml.SectionMol",
+        molecule: gml.SectionMol,
         graph: AtomicGraph,
         edge: tuple[int, int],
         *,
@@ -923,7 +923,7 @@ class TopologySurgery:
 
     def _add_connection_dihedrals(
         self,
-        molecule: "gml.SectionMol",
+        molecule: gml.SectionMol,
         graph: AtomicGraph,
         edge: tuple[int, int],
         *,
@@ -961,7 +961,7 @@ class TopologySurgery:
 
     def _refresh_connection_pairs(
         self,
-        molecule: "gml.SectionMol",
+        molecule: gml.SectionMol,
         graph: AtomicGraph,
         previous_graph: AtomicGraph,
         *,
@@ -1084,7 +1084,7 @@ class TopologySurgery:
             for index, atoms in enumerate(components, start=1)
         )
 
-    def _molecule(self) -> "gml.SectionMol":
+    def _molecule(self) -> gml.SectionMol:
         """Return the sole working molecule."""
         return self._top.get_molecule(self._molecule_name)
 
@@ -1101,7 +1101,7 @@ class TopologySurgery:
 
     def _append_graph_term(
         self,
-        molecule: "gml.SectionMol",
+        molecule: gml.SectionMol,
         header: str,
         atoms: Sequence[int],
         default_function: int,
@@ -1215,10 +1215,7 @@ class TopologySurgery:
         header: str,
     ) -> tuple[BondedTerm, ...]:
         """Normalize one term or a term sequence."""
-        if isinstance(terms, BondedTerm):
-            normalized = (terms,)
-        else:
-            normalized = tuple(terms)
+        normalized = (terms,) if isinstance(terms, BondedTerm) else tuple(terms)
         if not all(isinstance(term, BondedTerm) for term in normalized):
             raise TypeError("parameter resolver values must be BondedTerm records")
         if not normalized:

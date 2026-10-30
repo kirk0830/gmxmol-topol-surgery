@@ -27,9 +27,9 @@ __version__ = "0.5.0"
 
 __all__ = [
     "AtomEdge",
-    "AtomicGraph",
     "AtomRemovalResult",
     "AtomSpec",
+    "AtomicGraph",
     "BondedTerm",
     "Component",
     "ExportResult",

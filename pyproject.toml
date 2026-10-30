@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,6 +7,7 @@ name = "topolsurgery"
 version = "0.5.0"
 description = "Graph-based single-bond surgery for GROMACS topologies"
 readme = "README.md"
+license = "Apache-2.0"
 requires-python = ">=3.10"
 keywords = [
     "gromacs",
@@ -14,7 +15,10 @@ keywords = [
     "molecular-dynamics",
     "topology",
     "graph",
+    "moleculetype",
+    "bonded-terms",
 ]
+authors = [{ name = "Yike Huang", email = "yike.huang@aliyun.com" }]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -23,10 +27,16 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
+
 dependencies = [
+    # Pinned to the parser/writer contract this package is validated against.
+    # Re-validate and widen the range before relaxing.
     "gromologist==0.332",
 ]
 
@@ -38,7 +48,7 @@ Issues = "https://github.com/kirk0830/gmxmol-topol-surgery/issues"
 [project.optional-dependencies]
 test = [
     "pytest>=8",
-    "ruff>=0.6",
+    "ruff>=0.17",
     "build>=1.2",
 ]
 
@@ -58,3 +68,72 @@ where = ["src"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# Rules that currently pass on the whole tree, so a ruff upgrade can never
+# redden CI with a new default rule set. Add rules deliberately, with fixes.
+select = [
+    "E4",
+    "E7",
+    "E9",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "SIM",
+    "RUF",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["topolsurgery"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64"]
+
+[tool.pixi.dependencies]
+pytest = ">=8"
+ruff = ">=0.17"
+
+[tool.pixi.pypi-dependencies]
+topolsurgery = { path = ".", editable = true }
+build = ">=1.2"
+
+[tool.pixi.tasks]
+fmt = "ruff format src tests"
+fmt-check = "ruff format --check src tests"
+lint = "ruff check src tests"
+lint-fix = "ruff check --fix src tests"
+test = "pytest"
+check = { depends-on = ["fmt-check", "lint", "test"] }
+package = "python -m build --sdist"
+
+[tool.pixi.feature.py310.dependencies]
+python = "3.10.*"
+
+[tool.pixi.feature.py311.dependencies]
+python = "3.11.*"
+
+[tool.pixi.feature.py312.dependencies]
+python = "3.12.*"
+
+[tool.pixi.feature.py313.dependencies]
+python = "3.13.*"
+
+[tool.pixi.feature.py314.dependencies]
+python = "3.14.*"
+
+[tool.pixi.environments]
+default = { features = ["py312"] }
+py310 = { features = ["py310"] }
+py311 = { features = ["py311"] }
+py312 = { features = ["py312"] }
+py313 = { features = ["py313"] }
+py314 = { features = ["py314"] }

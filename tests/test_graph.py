@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import deque
-from itertools import permutations
+from itertools import pairwise, permutations
 from random import Random
 
 import pytest
@@ -148,13 +148,10 @@ def test_random_graph_matches_independent_brute_force_graph() -> None:
         for edge in graph.edges:
             expected = set()
             for sequence in permutations(nodes, 4):
-                if edge not in {
-                    tuple(sorted(pair)) for pair in zip(sequence[:-1], sequence[1:])
-                }:
+                if edge not in {tuple(sorted(pair)) for pair in pairwise(sequence)}:
                     continue
                 if all(
-                    second in adjacency[first]
-                    for first, second in zip(sequence[:-1], sequence[1:])
+                    second in adjacency[first] for first, second in pairwise(sequence)
                 ):
                     expected.add(min(sequence, tuple(reversed(sequence))))
             assert graph.proper_dihedrals_through_edge(edge) == expected

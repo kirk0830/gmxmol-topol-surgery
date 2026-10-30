@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Callable, Mapping, Sequence
 
 import gromologist as gml
 
@@ -40,11 +40,11 @@ class ParameterLibrary:
 class FlatTopology:
     """A topology normalized to one working molecule."""
 
-    top: "gml.Top"
+    top: gml.Top
     molecule_name: str
 
 
-def molecule_nrexcl(molecule: "gml.SectionMol") -> int:
+def molecule_nrexcl(molecule: gml.SectionMol) -> int:
     """Read ``nrexcl`` from a moleculetype header."""
     subsection = molecule.get_subsection("moleculetype")
     for entry in subsection.entries:
@@ -53,7 +53,7 @@ def molecule_nrexcl(molecule: "gml.SectionMol") -> int:
     raise ValueError(f"molecule {molecule.mol_name!r} has no readable nrexcl")
 
 
-def flatten_topology(topology: "gml.Top") -> FlatTopology:
+def flatten_topology(topology: gml.Top) -> FlatTopology:
     """Materialize system instances into one molecule for atom-level surgery.
 
     Parameters
@@ -132,7 +132,7 @@ def flatten_topology(topology: "gml.Top") -> FlatTopology:
     )
 
 
-def _audit_system_level_sections(top: "gml.Top") -> None:
+def _audit_system_level_sections(top: gml.Top) -> None:
     """Reject system-level records that flattened surgery cannot preserve."""
     for section in top.sections:
         if isinstance(section, (gml.SectionMol, gml.SectionParam)):
@@ -159,7 +159,7 @@ def _audit_system_level_sections(top: "gml.Top") -> None:
             )
 
 
-def _consolidate_system_rows(top: "gml.Top") -> None:
+def _consolidate_system_rows(top: gml.Top) -> None:
     """Merge contiguous repeated ``[ molecules ]`` names."""
     section = next(
         (section for section in top.sections if section.has_subsection("molecules")),
@@ -184,7 +184,7 @@ def _consolidate_system_rows(top: "gml.Top") -> None:
         subsection.add_entry(gml.Entry(f"{name} {count}", subsection))
 
 
-def rewrite_system(top: "gml.Top", molecule_name: str) -> None:
+def rewrite_system(top: gml.Top, molecule_name: str) -> None:
     """Replace the system composition with one copy of *molecule_name*.
 
     Parameters
@@ -210,7 +210,7 @@ def rewrite_system(top: "gml.Top", molecule_name: str) -> None:
 
 
 def subset_molecule(
-    molecule: "gml.SectionMol",
+    molecule: gml.SectionMol,
     atom_numbers: Sequence[int],
 ) -> dict[int, int]:
     """Keep one atom subset and compactly renumber all molecule records."""
@@ -266,9 +266,9 @@ def subset_molecule(
 
 
 def bonded_entries(
-    molecule: "gml.SectionMol",
+    molecule: gml.SectionMol,
     header: str,
-) -> list["gml.EntryBonded"]:
+) -> list[gml.EntryBonded]:
     """Return parsed entries of one bonded subsection."""
     try:
         subsection = molecule.get_subsection(header)
@@ -278,9 +278,9 @@ def bonded_entries(
 
 
 def ensure_bonded_subsection(
-    molecule: "gml.SectionMol",
+    molecule: gml.SectionMol,
     header: str,
-) -> "gml.SubsectionBonded":
+) -> gml.SubsectionBonded:
     """Return *header*, creating an empty interaction subsection if absent."""
     molecule.init_subsection(header)
     subsection = molecule.get_subsection(header)
@@ -290,13 +290,13 @@ def ensure_bonded_subsection(
 
 
 def append_bonded_entry(
-    molecule: "gml.SectionMol",
+    molecule: gml.SectionMol,
     header: str,
     atom_numbers: Sequence[int],
     function: int | str,
     parameters: Sequence[int | float | str] = (),
     second_parameters: Sequence[int | float | str] = (),
-) -> "gml.EntryBonded":
+) -> gml.EntryBonded:
     """Append one atom-addressed interaction row.
 
     Parameters
@@ -342,7 +342,7 @@ def append_bonded_entry(
     return entry
 
 
-def edge_rows(molecule: "gml.SectionMol") -> tuple[tuple[int, int], ...]:
+def edge_rows(molecule: gml.SectionMol) -> tuple[tuple[int, int], ...]:
     """Return connectivity edges in topology-file order.
 
     A ``[ settles ]`` row names only its oxygen. GROMACS assigns the next
@@ -366,7 +366,7 @@ def edge_rows(molecule: "gml.SectionMol") -> tuple[tuple[int, int], ...]:
 
 
 def settle_atom_triples(
-    molecule: "gml.SectionMol",
+    molecule: gml.SectionMol,
 ) -> tuple[tuple[int, int, int], ...]:
     """Return ``(oxygen, hydrogen_one, hydrogen_two)`` SETTLE groups."""
     triples = []
@@ -386,7 +386,7 @@ def settle_atom_triples(
 
 
 def component_dependency_pairs(
-    molecule: "gml.SectionMol",
+    molecule: gml.SectionMol,
 ) -> tuple[tuple[int, int], ...]:
     """Return non-chemical ownership dependencies for component grouping."""
     pairs = []
@@ -402,8 +402,8 @@ def component_dependency_pairs(
 
 
 def component_groups(
-    molecule: "gml.SectionMol",
-    graph: "AtomicGraph",
+    molecule: gml.SectionMol,
+    graph: AtomicGraph,
 ) -> tuple[tuple[int, ...], ...]:
     """Partition atoms while honoring virtual-site ownership dependencies."""
     dependencies = component_dependency_pairs(molecule)
@@ -416,7 +416,7 @@ def component_groups(
 
 
 def remove_settles_intersecting_atoms(
-    molecule: "gml.SectionMol",
+    molecule: gml.SectionMol,
     removed_atoms: set[int],
 ) -> None:
     """Delete any SETTLE group whose oxygen or hydrogen is removed."""
@@ -480,7 +480,7 @@ def canonical_type_pattern(
 
 
 def collect_parameter_templates(
-    molecule: "gml.SectionMol",
+    molecule: gml.SectionMol,
 ) -> ParameterLibrary:
     """Index explicit bonded parameters by function and atom-type pattern.
 
@@ -651,7 +651,7 @@ def canonical_interaction(
 
 
 def preferred_function(
-    molecule: "gml.SectionMol",
+    molecule: gml.SectionMol,
     header: str,
     default: int,
     *,
@@ -669,7 +669,7 @@ def preferred_function(
 
 
 def remove_exact_edges(
-    molecule: "gml.SectionMol",
+    molecule: gml.SectionMol,
     headers: Sequence[str],
     edge: tuple[int, int],
 ) -> int:
@@ -695,8 +695,8 @@ def remove_exact_edges(
 
 
 def sanitize_interactions(
-    molecule: "gml.SectionMol",
-    graph: "AtomicGraph",
+    molecule: gml.SectionMol,
+    graph: AtomicGraph,
 ) -> int:
     """Drop angle, torsional, and cmap rows invalidated by the graph."""
     return (
@@ -707,8 +707,8 @@ def sanitize_interactions(
 
 
 def _sanitize_angles(
-    molecule: "gml.SectionMol",
-    graph: "AtomicGraph",
+    molecule: gml.SectionMol,
+    graph: AtomicGraph,
 ) -> int:
     """Drop angle rows without both incident graph edges."""
     try:
@@ -729,8 +729,8 @@ def _sanitize_angles(
 
 
 def _sanitize_dihedrals(
-    molecule: "gml.SectionMol",
-    graph: "AtomicGraph",
+    molecule: gml.SectionMol,
+    graph: AtomicGraph,
 ) -> int:
     """Drop invalid propers and component-spanning impropers."""
     component_of = graph.component_of
@@ -760,8 +760,8 @@ def _sanitize_dihedrals(
 
 
 def _sanitize_cmaps(
-    molecule: "gml.SectionMol",
-    graph: "AtomicGraph",
+    molecule: gml.SectionMol,
+    graph: AtomicGraph,
 ) -> int:
     """Drop CMAP rows whose five-atom path no longer exists."""
     try:
@@ -786,8 +786,8 @@ def _sanitize_cmaps(
 
 
 def rebuild_pairs(
-    molecule: "gml.SectionMol",
-    graph: "AtomicGraph",
+    molecule: gml.SectionMol,
+    graph: AtomicGraph,
     *,
     create: bool,
     previous_expected: set[tuple[int, int]] | None = None,
@@ -827,7 +827,7 @@ def rebuild_pairs(
     expected = graph.pairs_at_distance(3)
     default_function = preferred_function(molecule, "pairs", 1)
     component_of = graph.component_of
-    retained: dict[tuple[int, int], "gml.EntryBonded"] = {}
+    retained: dict[tuple[int, int], gml.EntryBonded] = {}
     for entry in subsection.entries:
         if not isinstance(entry, gml.EntryBonded):
             continue
@@ -860,7 +860,7 @@ def rebuild_pairs(
 
 
 def resolve_parameter_tables(
-    molecule: "gml.SectionMol",
+    molecule: gml.SectionMol,
 ) -> list[tuple[str, int, tuple[int, ...]]]:
     """Fill missing explicit parameters from the parsed force-field tables.
 

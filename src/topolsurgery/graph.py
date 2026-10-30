@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from itertools import pairwise
 from types import MappingProxyType
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 
 @dataclass(frozen=True, order=True)
@@ -129,7 +131,7 @@ class AtomicGraph:
         edges: Iterable[tuple[int, int] | AtomEdge] = (),
         *,
         bond_orders: Mapping[tuple[int, int], int] | None = None,
-    ) -> "AtomicGraph":
+    ) -> AtomicGraph:
         """Build a graph from an atom count or explicit node sequence."""
         if isinstance(nodes, int) and not isinstance(nodes, bool):
             if nodes < 1:
@@ -143,7 +145,7 @@ class AtomicGraph:
         molecule: object,
         *,
         include_constraints: bool = True,
-    ) -> "AtomicGraph":
+    ) -> AtomicGraph:
         """Build connectivity from a ``gromologist.SectionMol``-like object.
 
         Parameters
@@ -187,7 +189,7 @@ class AtomicGraph:
         return cls(nodes, edges)
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "AtomicGraph":
+    def from_dict(cls, data: Mapping[str, Any]) -> AtomicGraph:
         """Restore a graph from :meth:`to_dict` output."""
         return cls(
             tuple(int(node) for node in data["nodes"]),
@@ -449,8 +451,7 @@ class AtomicGraph:
         for node in values:
             self._require_node(node)
         return bool(values) and all(
-            self.has_edge(first, second)
-            for first, second in zip(values[:-1], values[1:])
+            self.has_edge(first, second) for first, second in pairwise(values)
         )
 
     def with_edges(
@@ -458,7 +459,7 @@ class AtomicGraph:
         edges: Iterable[tuple[int, int] | AtomEdge],
         *,
         bond_orders: Mapping[tuple[int, int], int] | None = None,
-    ) -> "AtomicGraph":
+    ) -> AtomicGraph:
         """Return a copy with edges added or their order metadata updated."""
         orders = dict(self._bond_orders)
         orders.update(bond_orders or {})
@@ -474,7 +475,7 @@ class AtomicGraph:
         second: int,
         *,
         bond_order: int | None = None,
-    ) -> "AtomicGraph":
+    ) -> AtomicGraph:
         """Return a copy with one edge added or its order metadata updated."""
         pair = _canonical_pair((first, second))
         return self.with_edges(
@@ -485,7 +486,7 @@ class AtomicGraph:
     def without_edges(
         self,
         edges: Iterable[tuple[int, int]],
-    ) -> "AtomicGraph":
+    ) -> AtomicGraph:
         """Return a copy with connectivity edges removed when present."""
         removed = {_canonical_pair(edge) for edge in edges}
         for first, second in removed:
@@ -503,11 +504,11 @@ class AtomicGraph:
             },
         )
 
-    def without_edge(self, first: int, second: int) -> "AtomicGraph":
+    def without_edge(self, first: int, second: int) -> AtomicGraph:
         """Return a copy with one connectivity edge removed."""
         return self.without_edges(((first, second),))
 
-    def subgraph(self, nodes: Iterable[int]) -> "AtomicGraph":
+    def subgraph(self, nodes: Iterable[int]) -> AtomicGraph:
         """Return the node-induced subgraph."""
         selected = tuple(nodes)
         selected_set = set(selected)
@@ -528,7 +529,7 @@ class AtomicGraph:
             },
         )
 
-    def remap(self, node_mapping: Mapping[int, int]) -> "AtomicGraph":
+    def remap(self, node_mapping: Mapping[int, int]) -> AtomicGraph:
         """Return the graph in a renamed or compacted node space."""
         missing = [node for node in self.nodes if node not in node_mapping]
         if missing:
