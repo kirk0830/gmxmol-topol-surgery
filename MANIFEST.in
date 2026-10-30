@@ -1,0 +1,5 @@
+include AGENTS.md
+include README.md
+include REVIEW.md
+include REVIEW_STATUS.md
+recursive-include tests *.py *.mdp

@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "topolsurgery"
+version = "0.5.0"
+description = "Graph-based single-bond surgery for GROMACS topologies"
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = [
+    "gromacs",
+    "force-field",
+    "molecular-dynamics",
+    "topology",
+    "graph",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Typing :: Typed",
+]
+dependencies = [
+    "gromologist==0.332",
+]
+
+[project.urls]
+Homepage = "https://github.com/kirk0830/gmxmol-topol-surgery"
+Repository = "https://github.com/kirk0830/gmxmol-topol-surgery"
+Issues = "https://github.com/kirk0830/gmxmol-topol-surgery/issues"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "build>=1.2",
+]
+
+[project.scripts]
+topolsurgery = "topolsurgery.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+topolsurgery = ["py.typed"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
