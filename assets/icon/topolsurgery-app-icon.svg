@@ -1,14 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" fill="none" role="img" aria-labelledby="title desc">
   <title id="title">topolsurgery</title>
-  <desc id="desc">App icon: dark rounded tile carrying the cut-bond mark.</desc>
+  <desc id="desc">App icon: dark rounded tile carrying the beaded G cut-bond mark.</desc>
   <rect width="512" height="512" rx="112" fill="#16181D"/>
-  <g transform="translate(64 64) scale(16)">
-    <g stroke="#F2F5F4" stroke-width="2" stroke-linecap="round">
-      <path d="M8.4 12h2"/>
-      <path d="M13.6 12h2"/>
+  <g transform="translate(256 256) scale(22.5) translate(-12.4375 -12)">
+    <g stroke="#F2F5F4" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17.625 4.5H8.875"/>
+      <path d="M8.875 4.5V9.75"/>
+      <path d="M8.875 14.25V19.5"/>
+      <path d="M8.875 19.5H17.625"/>
+      <path d="M17.625 19.5V12.625"/>
+      <path d="M17.625 12.625H13.5"/>
     </g>
-    <line x1="10.5" y1="8" x2="13.5" y2="16" stroke="#2DD4BF" stroke-width="2" stroke-linecap="round"/>
-    <circle cx="6" cy="12" r="2.3" fill="#F2F5F4"/>
-    <circle cx="18" cy="12" r="2.3" fill="#F2F5F4"/>
+    <line x1="7.25" y1="10.25" x2="10.5" y2="13.75" stroke="#2DD4BF" stroke-width="1.9" stroke-linecap="round"/>
+    <g fill="#F2F5F4">
+      <circle cx="17.625" cy="4.5" r="1.25"/>
+      <circle cx="8.875" cy="4.5" r="1.25"/>
+      <circle cx="8.875" cy="19.5" r="1.25"/>
+      <circle cx="17.625" cy="19.5" r="1.25"/>
+      <circle cx="17.625" cy="12.625" r="1.25"/>
+      <circle cx="13.5" cy="12.625" r="1.25"/>
+    </g>
   </g>
 </svg>
