@@ -1,21 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" role="img" aria-labelledby="title desc">
   <title id="title">topolsurgery</title>
-  <desc id="desc">A molecular graph drawn as the letter G, its left spine cut by one surgical stroke. Dark-background variant.</desc>
-  <g stroke="#F2F5F4" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M17.625 4.5H8.875"/>
-    <path d="M8.875 4.5V9.75"/>
-    <path d="M8.875 14.25V19.5"/>
-    <path d="M8.875 19.5H17.625"/>
-    <path d="M17.625 19.5V12.625"/>
-    <path d="M17.625 12.625H13.5"/>
-  </g>
-  <line x1="7.25" y1="10.25" x2="10.5" y2="13.75" stroke="#2DD4BF" stroke-width="1.9" stroke-linecap="round"/>
+  <desc id="desc">Dark-surface variant of the rounded G cut into a C.</desc>
+  <path stroke="#F2F5F4" stroke-width="2.12" stroke-linecap="round" d="M17.303 17.303 A7.5 7.5 0 1 1 17.303 6.697"/>
+  <path stroke="#F2F5F4" stroke-width="2.12" stroke-linecap="round" d="M17.303 14 V12 H13"/>
+  <path stroke="#2DD4BF" stroke-width="2.38" stroke-linecap="round" d="M16.125 14.125 L18.25 16.125"/>
   <g fill="#F2F5F4">
-    <circle cx="17.625" cy="4.5" r="1.25"/>
-    <circle cx="8.875" cy="4.5" r="1.25"/>
-    <circle cx="8.875" cy="19.5" r="1.25"/>
-    <circle cx="17.625" cy="19.5" r="1.25"/>
-    <circle cx="17.625" cy="12.625" r="1.25"/>
-    <circle cx="13.5" cy="12.625" r="1.25"/>
+    <circle cx="17.303" cy="6.697" r="1.56"/>
+    <circle cx="17.303" cy="12" r="1.56"/>
+    <circle cx="13" cy="12" r="1.56"/>
   </g>
 </svg>
