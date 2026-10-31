@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">topolsurgery</title>
+  <desc id="desc">App icon: dark rounded tile carrying the cut-bond mark.</desc>
+  <rect width="512" height="512" rx="112" fill="#16181D"/>
+  <g transform="translate(64 64) scale(16)">
+    <g stroke="#F2F5F4" stroke-width="2" stroke-linecap="round">
+      <path d="M8.4 12h2"/>
+      <path d="M13.6 12h2"/>
+    </g>
+    <line x1="10.5" y1="8" x2="13.5" y2="16" stroke="#2DD4BF" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="6" cy="12" r="2.3" fill="#F2F5F4"/>
+    <circle cx="18" cy="12" r="2.3" fill="#F2F5F4"/>
+  </g>
+</svg>
