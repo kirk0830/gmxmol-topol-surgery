@@ -1,4 +1,8 @@
-# topolsurgery
+<p align="center">
+  <img src="assets/icon/topolsurgery-app-icon.svg" width="120" alt="topolsurgery icon">
+</p>
+
+<h1 align="center">topolsurgery</h1>
 
 [![CI](https://github.com/kirk0830/gmxmol-topol-surgery/actions/workflows/ci.yml/badge.svg)](https://github.com/kirk0830/gmxmol-topol-surgery/actions/workflows/ci.yml)
 
