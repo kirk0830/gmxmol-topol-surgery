@@ -215,7 +215,7 @@ rows, including for impropers where the ordering is part of the chemistry.
 | `terms` | `BondedTerm` or sequence, `None` | Explicit rows appended in order; bypasses parameter resolution. Multi-row sequences are function-9 dihedrals. |
 | `parameter_resolver` | callable or `None` | Caller callback consulted before topology templates when `terms` is `None`. |
 | `parameter_overrides` | mapping or `None` | Exact atom-sequence terms, checked before the callback under any equivalent ordering. |
-| `resolve_parameters` | `bool = True` | Attempt parsed force-field table lookup for missing parameters. |
+| `resolve_parameters` | `bool = True` | Attempt parsed force-field table lookup for missing parameters on the appended rows only. |
 
 Validation rules:
 
@@ -232,8 +232,8 @@ Validation rules:
   explicit pairs are not required to be 1-4 pairs.
 - Angles, pairs, and improper dihedrals are rejected when the same
   canonical atom key and function already exist. Proper dihedrals may
-  accumulate multi-term rows; only an exact duplicate (same canonical
-  atoms, function, and both parameter states) is rejected.
+  accumulate multi-term rows. Function-9 multiplicities must be unique per
+  atom quartet and A/B state across calls; an exact duplicate row is rejected.
 
 When `terms` is omitted, parameters follow the same precedence chain as
 `connect_bond`: `parameter_overrides`, then `parameter_resolver`, then
@@ -244,7 +244,8 @@ atom ordering and `default_function` — the explicit `function` or the
 section default — so `default_function` 2 or 4 marks an improper request.
 Because improper chemistry is caller policy, improper parameters come from
 terms, overrides, or a resolver; the topology-template layer indexes proper
-torsions only.
+torsions only. Table resolution is scoped to rows appended by this call and
+does not fill older unparameterized rows.
 
 The graph, components, and bond orders are unchanged. The result reports
 `operation="add"`, the appended rows in `edit.created`, and `atom_pair` as
@@ -589,9 +590,10 @@ For any calling package, the normal integration sequence is:
 2. Construct one `TopologySurgery` session. Keep chemistry decisions such as
    atom typing, cap policy, charge redistribution, and improper rules in the
    caller.
-3. Run exactly one of `cut_bond`, `connect_bond`, or `remove_atoms`.
-4. Inspect `result.warnings`. Treat them as fatal unless the caller has an
-   explicit downstream parameter policy.
+3. Run exactly one of `cut_bond`, `connect_bond`, `add_interaction`, or
+   `remove_atoms`.
+4. Inspect `result.warnings`. Treat warnings with `blocking=True` as fatal
+   unless the caller has an explicit downstream parameter policy.
 5. Preserve `result.edit` if reaction provenance is required.
 6. Either `session.save(...)` the combined topology or call
    `result.export(...)`/`result.component_snapshots()` to split ownership
@@ -608,14 +610,18 @@ result = session.connect_bond(
     bond_parameters=(0.153, 251040.0),
     bond_order=1,
 )
-if result.warnings:
+blocking_warnings = [warning for warning in result.warnings if warning.blocking]
+if blocking_warnings:
     raise RuntimeError(
         "topology has unresolved parameters: "
-        + "; ".join(str(warning) for warning in result.warnings)
+        + "; ".join(str(warning) for warning in blocking_warnings)
     )
 
 files = result.export("products", format="itp", prefix="product")
 ```
+
+Non-blocking warnings, such as an explicitly added pair at a graph distance
+other than three, are informational and do not fail this gate.
 
 Use `session.clone()` before speculative edits and
 `TopologySurgery.from_result(result)` to branch from a completed result.

@@ -42,6 +42,7 @@ from topolsurgery._topology import (
     remap_parameter_templates,
     remove_exact_edges,
     remove_settles_intersecting_atoms,
+    resolve_parameter_entries,
     resolve_parameter_tables,
     rewrite_system,
     sanitize_interactions,
@@ -905,7 +906,7 @@ class TopologySurgery:
             Exact atom-sequence overrides checked before the resolver.
         resolve_parameters : bool
             Try to fill missing explicit parameters from the parsed
-            force-field tables.
+            force-field tables for the appended rows only.
 
         Returns
         -------
@@ -984,6 +985,7 @@ class TopologySurgery:
                 raise ValueError("terms must provide at least one BondedTerm")
 
         existing_rows = list(self.interactions(cast(InteractionKind, section)))
+        appended_entries: list[gml.EntryBonded] = []
         for term in rows:
             self._validate_added_graph_constraints(section, atom_tuple, term.function)
             candidate = InteractionSpec(
@@ -994,13 +996,15 @@ class TopologySurgery:
                 second_parameters=term.second_parameters,
             )
             self._reject_duplicate_interaction(section, candidate, existing_rows)
-            append_bonded_entry(
-                molecule,
-                section,
-                atom_tuple,
-                term.function,
-                term.parameters,
-                term.second_parameters,
+            appended_entries.append(
+                append_bonded_entry(
+                    molecule,
+                    section,
+                    atom_tuple,
+                    term.function,
+                    term.parameters,
+                    term.second_parameters,
+                )
             )
             existing_rows.append(candidate)
 
@@ -1025,6 +1029,7 @@ class TopologySurgery:
             self._connection_warnings(
                 before_interactions,
                 resolve_parameters=resolve_parameters,
+                requested_entries=appended_entries,
             )
         )
         self._parameter_templates = merge_parameter_libraries(
@@ -1182,6 +1187,7 @@ class TopologySurgery:
         before_interactions: Sequence[InteractionSpec],
         *,
         resolve_parameters: bool,
+        requested_entries: Sequence[gml.EntryBonded] = (),
     ) -> list[SurgeryWarning]:
         """Resolve tables when requested and report unresolved new rows."""
         created_interactions, _removed = diff_interactions(
@@ -1190,7 +1196,12 @@ class TopologySurgery:
         )
         missing: set[tuple[str, int, tuple[int, ...]]] = set()
         if resolve_parameters:
-            missing.update(resolve_parameter_tables(self._molecule()))
+            if requested_entries:
+                missing.update(
+                    resolve_parameter_entries(self._molecule(), requested_entries)
+                )
+            else:
+                missing.update(resolve_parameter_tables(self._molecule()))
         else:
             missing.update(
                 (
@@ -1355,6 +1366,8 @@ class TopologySurgery:
                 if terms:
                     return terms
 
+        if default_function in _IMPROPER_FUNCTION_IDS:
+            return None
         templates = lookup_parameter_templates(
             self._parameter_templates,
             header,
@@ -1521,6 +1534,22 @@ class TopologySurgery:
                 spec.parameters != candidate.parameters
                 or spec.second_parameters != candidate.second_parameters
             ):
+                if candidate.function == 9:
+                    for label, old_parameters, new_parameters in (
+                        ("state-A", spec.parameters, candidate.parameters),
+                        (
+                            "state-B",
+                            spec.second_parameters,
+                            candidate.second_parameters,
+                        ),
+                    ):
+                        shared = set(old_parameters[2::3]) & set(new_parameters[2::3])
+                        if shared:
+                            raise ValueError(
+                                f"function-9 dihedral {canonical} already has "
+                                f"{label} multiplicities {sorted(shared)}; "
+                                "multiplicities must be unique per quartet"
+                            )
                 continue
             if proper:
                 raise ValueError(

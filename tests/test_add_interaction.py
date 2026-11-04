@@ -17,6 +17,17 @@ from topolsurgery import (
 
 _TYPES = ("c3", "n", "ca", "o", "c3", "c3")
 
+_PARAMETER_SECTIONS = """\
+[ defaults ]
+1 2 yes 0.5 0.8333
+
+[ atomtypes ]
+c3 c3 12.011 0.0 A 0.339967 0.45773
+
+[ angletypes ]
+c3 c3 c3 1 109.5 460.24
+"""
+
 
 def _atoms(count: int = 6) -> tuple[AtomSpec, ...]:
     """Return a chain specification with distinguishable atom types."""
@@ -44,6 +55,23 @@ def _chain_bonds(count: int) -> tuple[InteractionSpec, ...]:
 def _chain_surgery(count: int = 6) -> TopologySurgery:
     """Return a connected linear chain session without angled terms."""
     return TopologySurgery.from_records(_atoms(count), _chain_bonds(count))
+
+
+def _uniform_chain_surgery(count: int = 6) -> TopologySurgery:
+    """Return a chain whose atoms share one type."""
+    atoms = tuple(
+        AtomSpec(
+            number=index,
+            atom_type="c3",
+            atom_name=f"C{index}",
+            residue_number=1,
+            residue_name="MOL",
+            charge=0.0,
+            mass=12.011,
+        )
+        for index in range(1, count + 1)
+    )
+    return TopologySurgery.from_records(atoms, _chain_bonds(count))
 
 
 @pytest.mark.parametrize(
@@ -273,6 +301,79 @@ def test_duplicate_policy_per_section() -> None:
 
 
 @pytest.mark.parametrize(
+    ("existing", "candidate", "shared_state"),
+    (
+        (
+            BondedTerm(9, (0.0, 0.2, 1)),
+            BondedTerm(9, (180.0, 0.5, 1)),
+            "state-A",
+        ),
+        (
+            BondedTerm(9, (0.0, 0.2, 2), (0.0, 0.3, 1)),
+            BondedTerm(9, (180.0, 0.5, 3), (180.0, 0.6, 1)),
+            "state-B",
+        ),
+    ),
+)
+def test_function9_multiplicities_are_unique_across_calls(
+    existing: BondedTerm,
+    candidate: BondedTerm,
+    shared_state: str,
+) -> None:
+    """A later add cannot reuse a multiplicity for the same quartet."""
+    surgery = _uniform_chain_surgery()
+    surgery.add_interaction(
+        "dihedrals",
+        (1, 2, 3, 4),
+        terms=existing,
+        resolve_parameters=False,
+    )
+    before = surgery.snapshot()
+
+    with pytest.raises(
+        ValueError,
+        match=rf"{shared_state} multiplicities .* must be unique",
+    ):
+        surgery.add_interaction(
+            "dihedrals",
+            (4, 3, 2, 1),
+            terms=candidate,
+            resolve_parameters=False,
+        )
+
+    assert surgery.snapshot() == before
+
+
+def test_improper_request_does_not_reuse_a_proper_template() -> None:
+    """Topology templates index proper torsions only."""
+    surgery = _uniform_chain_surgery()
+    surgery.add_interaction(
+        "dihedrals",
+        (1, 2, 3, 4),
+        terms=BondedTerm(9, (0.0, 0.2, 3)),
+        resolve_parameters=False,
+    )
+
+    result = surgery.add_interaction(
+        "dihedrals",
+        (2, 3, 4, 5),
+        function=2,
+        resolve_parameters=False,
+    )
+
+    assert surgery.interactions("dihedrals")[-1] == InteractionSpec(
+        "dihedrals",
+        (2, 3, 4, 5),
+        2,
+    )
+    assert result.edit is not None
+    assert result.edit.created == (surgery.interactions("dihedrals")[-1],)
+    assert [(warning.code, warning.kind) for warning in result.warnings] == [
+        ("unresolved_parameter", "dihedrals")
+    ]
+
+
+@pytest.mark.parametrize(
     ("function", "parameters", "second_parameters"),
     (
         (2, (180.0, 4.6), (170.0, 5.1)),
@@ -457,6 +558,33 @@ def test_unparameterized_fallback_row_warns_with_table_resolution() -> None:
     assert ("unresolved_parameter", "angles", (2, 3, 4)) in reported
 
 
+def test_parameter_resolution_does_not_fill_existing_rows() -> None:
+    """An append only resolves table parameters for the requested row."""
+    atoms = tuple(
+        AtomSpec(index, "c3", f"C{index}", charge_group=index, mass=12.011)
+        for index in range(1, 5)
+    )
+    existing_angle = InteractionSpec("angles", (1, 2, 3), 1)
+    surgery = TopologySurgery.from_records(
+        atoms,
+        (*_chain_bonds(4), existing_angle),
+        parameter_sections=_PARAMETER_SECTIONS,
+    )
+
+    result = surgery.add_interaction("angles", (2, 3, 4))
+
+    assert surgery.interactions("angles") == (
+        existing_angle,
+        InteractionSpec("angles", (2, 3, 4), 1, (109.5, 460.24)),
+    )
+    assert result.edit is not None
+    assert result.edit.created == (
+        InteractionSpec("angles", (2, 3, 4), 1, (109.5, 460.24)),
+    )
+    assert result.edit.removed == ()
+    assert result.warnings == ()
+
+
 def test_resolve_parameters_false_reports_only_created_rows() -> None:
     """Without table resolution only new rows are diagnosed as unresolved."""
     surgery = _chain_surgery()
@@ -600,6 +728,33 @@ def test_resolver_exception_rolls_back_the_append() -> None:
             "angles",
             (2, 3, 4),
             parameter_resolver=resolver,
+            resolve_parameters=False,
+        )
+
+    assert surgery.snapshot() == before
+    assert surgery.graph.signature() == before_graph
+
+
+def test_later_duplicate_term_rolls_back_the_first_row() -> None:
+    """A failure after one appended row restores the complete session."""
+    surgery = _uniform_chain_surgery()
+    surgery.add_interaction(
+        "dihedrals",
+        (1, 2, 3, 4),
+        terms=BondedTerm(9, (0.0, 0.5, 1)),
+        resolve_parameters=False,
+    )
+    before = surgery.snapshot()
+    before_graph = surgery.graph.signature()
+
+    with pytest.raises(ValueError, match="identical row"):
+        surgery.add_interaction(
+            "dihedrals",
+            (1, 2, 3, 4),
+            terms=[
+                BondedTerm(9, (0.0, 0.2, 2)),
+                BondedTerm(9, (0.0, 0.5, 1)),
+            ],
             resolve_parameters=False,
         )
 
