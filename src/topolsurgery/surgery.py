@@ -23,6 +23,7 @@ from topolsurgery._records import (
 )
 from topolsurgery._topology import (
     IMPROPER_FUNCTIONS,
+    _canonical_atoms,
     append_bonded_entry,
     bonded_entries,
     canonical_angle,
@@ -65,6 +66,14 @@ from topolsurgery.model import (
     TopologyEdit,
     TopologySnapshot,
 )
+
+_IMPROPER_FUNCTION_IDS = frozenset(int(value) for value in IMPROPER_FUNCTIONS)
+_ADD_INTERACTION_SECTIONS: Mapping[str, tuple[int, int]] = {
+    # section -> (atom arity, preferred-function fallback)
+    "angles": (3, 1),
+    "dihedrals": (4, 9),
+    "pairs": (2, 1),
+}
 
 
 def _set_default_file_mode(path: Path) -> None:
@@ -857,6 +866,179 @@ class TopologySurgery:
             before_interactions=before_interactions,
         )
 
+    @_restore_on_error
+    def add_interaction(
+        self,
+        section: str,
+        atoms: Sequence[int],
+        *,
+        function: int | None = None,
+        terms: BondedTerm | Sequence[BondedTerm] | None = None,
+        parameter_resolver: ParameterResolver | None = None,
+        parameter_overrides: ParameterOverrides | None = None,
+        resolve_parameters: bool = True,
+    ) -> SurgeryResult:
+        """Append caller-chosen interaction rows without changing connectivity.
+
+        Parameters
+        ----------
+        section : str
+            One of ``"angles"``, ``"dihedrals"``, or ``"pairs"``.
+            Connectivity sections such as ``"bonds"`` and
+            ``"constraints"`` belong to :meth:`connect_bond`.
+        atoms : Sequence[int]
+            Unique 1-based atoms in the current topology. The given order
+            is preserved in the appended rows, so improper atom ordering
+            remains caller chemistry.
+        function : int, optional
+            Row function used for graph validation and parameter lookup
+            when ``terms`` is ``None``. ``None`` follows the most common
+            existing function of the section (proper-only for
+            dihedrals), falling back to 1, 9, or 1.
+        terms : BondedTerm or Sequence[BondedTerm], optional
+            Explicit rows appended in order, bypassing parameter
+            resolution. Multi-row sequences are function-9 dihedrals.
+        parameter_resolver : ParameterResolver, optional
+            Caller-owned resolver consulted before topology templates when
+            ``terms`` is ``None``.
+        parameter_overrides : ParameterOverrides, optional
+            Exact atom-sequence overrides checked before the resolver.
+        resolve_parameters : bool
+            Try to fill missing explicit parameters from the parsed
+            force-field tables.
+
+        Returns
+        -------
+        SurgeryResult
+            The unchanged graph partition with the appended rows reported
+            as created interactions.
+
+        Raises
+        ------
+        ValueError
+            The section is not appendable, the atoms are invalid, the
+            graph constraints are violated, or a row duplicates an
+            existing entry.
+        """
+        self._assert_supported_edit()
+        if not isinstance(section, str) or section not in _ADD_INTERACTION_SECTIONS:
+            raise ValueError(
+                f"add_interaction cannot append {section!r} rows; supported "
+                "sections are 'angles', 'dihedrals', and 'pairs'; change "
+                "connectivity with connect_bond instead"
+            )
+        arity, fallback = _ADD_INTERACTION_SECTIONS[section]
+        atom_tuple = _canonical_atoms(atoms)
+        if len(atom_tuple) != arity:
+            raise ValueError(
+                f"{section} interactions require {arity} atoms, got {len(atom_tuple)}"
+            )
+        maximum = self.atom_count
+        for atom in atom_tuple:
+            if not 1 <= atom <= maximum:
+                raise ValueError(
+                    f"atom {atom} is outside the topology range 1..{maximum}"
+                )
+        if len(set(atom_tuple)) != arity:
+            raise ValueError(f"{section} interaction atoms must be pairwise distinct")
+        if function is not None and (
+            not isinstance(function, int) or isinstance(function, bool) or function < 1
+        ):
+            raise ValueError("function must be a positive integer")
+
+        molecule = self._molecule()
+        graph = self.graph
+        before_interactions = self.interactions()
+        canonical_atoms = canonical_interaction(section, atom_tuple)
+        default_function = (
+            function
+            if function is not None
+            else preferred_function(
+                molecule,
+                section,
+                fallback,
+                proper_only=section == "dihedrals",
+            )
+        )
+
+        warnings: list[SurgeryWarning] = []
+        if terms is None:
+            self._validate_added_graph_constraints(
+                section,
+                atom_tuple,
+                default_function,
+            )
+            rows = self._resolve_graph_terms(
+                molecule,
+                section,
+                canonical_atoms,
+                default_function,
+                parameter_resolver=parameter_resolver,
+                parameter_overrides=parameter_overrides,
+            )
+            if rows is None:
+                rows = (BondedTerm(default_function),)
+        else:
+            rows = self._normalize_terms(terms, section)
+            if not rows:
+                raise ValueError("terms must provide at least one BondedTerm")
+
+        existing_rows = list(self.interactions(cast(InteractionKind, section)))
+        for term in rows:
+            self._validate_added_graph_constraints(section, atom_tuple, term.function)
+            candidate = InteractionSpec(
+                kind=cast(InteractionKind, section),
+                atoms=atom_tuple,
+                function=term.function,
+                parameters=term.parameters,
+                second_parameters=term.second_parameters,
+            )
+            self._reject_duplicate_interaction(section, candidate, existing_rows)
+            append_bonded_entry(
+                molecule,
+                section,
+                atom_tuple,
+                term.function,
+                term.parameters,
+                term.second_parameters,
+            )
+            existing_rows.append(candidate)
+
+        molecule.update_dicts()
+        if section == "pairs":
+            distance = graph.distance(atom_tuple[0], atom_tuple[1])
+            if distance != 3:
+                warnings.append(
+                    SurgeryWarning(
+                        code="pair_distance",
+                        kind="pairs",
+                        atoms=atom_tuple,
+                        message=(
+                            f"pairs interaction {canonical_atoms} is at graph "
+                            f"distance {distance}, not the canonical 1-4 "
+                            "distance 3"
+                        ),
+                        blocking=False,
+                    )
+                )
+        warnings.extend(
+            self._connection_warnings(
+                before_interactions,
+                resolve_parameters=resolve_parameters,
+            )
+        )
+        self._parameter_templates = merge_parameter_libraries(
+            self._parameter_templates,
+            collect_parameter_templates(molecule),
+        )
+        return self._result(
+            "add",
+            (min(atom_tuple), max(atom_tuple)),
+            warnings=warnings,
+            before_interactions=before_interactions,
+            edit_atoms=atom_tuple,
+        )
+
     def _insert_connection(
         self,
         molecule: gml.SectionMol,
@@ -1040,11 +1222,12 @@ class TopologySurgery:
 
     def _result(
         self,
-        operation: Literal["cut", "connect"],
+        operation: Literal["cut", "connect", "add"],
         edge: tuple[int, int],
         *,
         warnings: Sequence[SurgeryWarning] = (),
         before_interactions: Sequence[InteractionSpec] | None = None,
+        edit_atoms: Sequence[int] | None = None,
     ) -> SurgeryResult:
         """Snapshot the current graph partition."""
         public_components = self._public_components()
@@ -1056,7 +1239,7 @@ class TopologySurgery:
             )
             edit = TopologyEdit(
                 operation=operation,
-                atoms=edge,
+                atoms=edge if edit_atoms is None else tuple(sorted(edit_atoms)),
                 created=created,
                 removed=removed,
             )
@@ -1110,6 +1293,42 @@ class TopologySurgery:
         parameter_overrides: ParameterOverrides | None = None,
     ) -> None:
         """Append a graph term through caller and topology parameter layers."""
+        terms = self._resolve_graph_terms(
+            molecule,
+            header,
+            atoms,
+            default_function,
+            parameter_resolver=parameter_resolver,
+            parameter_overrides=parameter_overrides,
+        )
+        if terms is None:
+            append_bonded_entry(molecule, header, atoms, default_function)
+            return
+        for term in terms:
+            append_bonded_entry(
+                molecule,
+                header,
+                atoms,
+                term.function,
+                term.parameters,
+                term.second_parameters,
+            )
+
+    def _resolve_graph_terms(
+        self,
+        molecule: gml.SectionMol,
+        header: str,
+        atoms: Sequence[int],
+        default_function: int,
+        *,
+        parameter_resolver: ParameterResolver | None,
+        parameter_overrides: ParameterOverrides | None,
+    ) -> tuple[BondedTerm, ...] | None:
+        """Resolve terms through overrides, resolver, then templates.
+
+        Returns ``None`` when every layer declined, leaving an
+        unparameterized row as the mandatory fallback.
+        """
         type_by_number = {atom.num: atom.type for atom in molecule.atoms}
         atom_types = [type_by_number[atom] for atom in atoms]
         override = self._find_parameter_override(
@@ -1119,17 +1338,8 @@ class TopologySurgery:
         )
         if override is not None:
             override_terms = self._normalize_terms(override, header)
-            for term in override_terms:
-                append_bonded_entry(
-                    molecule,
-                    header,
-                    atoms,
-                    term.function,
-                    term.parameters,
-                    term.second_parameters,
-                )
             if override_terms:
-                return
+                return override_terms
 
         if parameter_resolver is not None:
             resolved = parameter_resolver(
@@ -1143,16 +1353,7 @@ class TopologySurgery:
             if resolved is not None:
                 terms = self._normalize_terms(resolved, header)
                 if terms:
-                    for term in terms:
-                        append_bonded_entry(
-                            molecule,
-                            header,
-                            atoms,
-                            term.function,
-                            term.parameters,
-                            term.second_parameters,
-                        )
-                    return
+                    return terms
 
         templates = lookup_parameter_templates(
             self._parameter_templates,
@@ -1162,24 +1363,14 @@ class TopologySurgery:
             default_function,
         )
         if templates:
-            template_terms = self._normalize_terms(
+            return self._normalize_terms(
                 tuple(
                     BondedTerm(function, parameters, second_parameters)
                     for function, parameters, second_parameters in templates
                 ),
                 header,
             )
-            for term in template_terms:
-                append_bonded_entry(
-                    molecule,
-                    header,
-                    atoms,
-                    term.function,
-                    term.parameters,
-                    term.second_parameters,
-                )
-            return
-        append_bonded_entry(molecule, header, atoms, default_function)
+        return None
 
     @staticmethod
     def _find_parameter_override(
@@ -1275,6 +1466,72 @@ class TopologySurgery:
                 "unique multiplicities"
             )
         return normalized
+
+    def _validate_added_graph_constraints(
+        self,
+        section: str,
+        atoms: tuple[int, ...],
+        function: int,
+    ) -> None:
+        """Enforce the graph invariants behind one appendable row."""
+        graph = self.graph
+        if section == "angles":
+            first, center, last = atoms
+            if not (graph.has_edge(first, center) and graph.has_edge(center, last)):
+                raise ValueError(
+                    f"angle {atoms} requires graph edges "
+                    f"{canonical_pair((first, center))} and "
+                    f"{canonical_pair((center, last))}"
+                )
+        elif section == "pairs":
+            component_of = graph.component_of
+            if component_of[atoms[0]] != component_of[atoms[1]]:
+                raise ValueError(
+                    f"pair {atoms[0]} and {atoms[1]} belong to different "
+                    "connected components"
+                )
+        elif function in _IMPROPER_FUNCTION_IDS:
+            component_of = graph.component_of
+            if len({component_of[atom] for atom in atoms}) != 1:
+                raise ValueError(
+                    f"improper dihedral {atoms} spans multiple connected components"
+                )
+        elif not graph.has_path(atoms):
+            raise ValueError(
+                f"proper dihedral {atoms} requires all three consecutive graph edges"
+            )
+
+    @staticmethod
+    def _reject_duplicate_interaction(
+        section: str,
+        candidate: InteractionSpec,
+        existing: Sequence[InteractionSpec],
+    ) -> None:
+        """Apply the per-section duplicate policy to one appendable row."""
+        canonical = canonical_interaction(section, candidate.atoms)
+        proper = section == "dihedrals" and candidate.function not in (
+            _IMPROPER_FUNCTION_IDS
+        )
+        for spec in existing:
+            if canonical_interaction(section, spec.atoms) != canonical:
+                continue
+            if spec.function != candidate.function:
+                continue
+            if proper and (
+                spec.parameters != candidate.parameters
+                or spec.second_parameters != candidate.second_parameters
+            ):
+                continue
+            if proper:
+                raise ValueError(
+                    f"proper dihedral {canonical} function "
+                    f"{candidate.function} already has the identical row "
+                    f"{candidate.parameters!r}"
+                )
+            raise ValueError(
+                f"{section} interaction {canonical} function "
+                f"{candidate.function} already exists"
+            )
 
     def _validate_edge(self, atom_i: int, atom_j: int) -> tuple[int, int]:
         """Validate and normalize one requested atom pair."""

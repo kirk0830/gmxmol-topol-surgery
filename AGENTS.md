@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## Orchestrator Checkpoint
+
+Autonomous-run state (task ledger, dispatch history, model evaluations,
+pending decisions) lives in `.agent/CHECKPOINT.md`. After any context
+compaction, read that file first to restore progress before acting.
+
 ## Purpose
 
 `topolsurgery` is the shared, domain-neutral surgery layer for GROMACS
@@ -94,7 +100,8 @@ The supported surfaces are:
   `from_snapshot`, `from_result`;
 - `TopologySurgery.graph`, `snapshot`, `atoms`, `interactions`, `components`,
   `bond_orders`, `clone`, `save`;
-- `TopologySurgery.cut_bond`, `connect_bond`, `remove_atoms`;
+- `TopologySurgery.cut_bond`, `connect_bond`, `remove_atoms`,
+  `add_interaction`;
 - `AtomicGraph` queries and immutable graph transformations;
 - `AtomSpec`, `AtomEdge`, `InteractionSpec`, `BondedTerm`,
   `ParameterRequest`, `GroFile`, `GroAtom`;
