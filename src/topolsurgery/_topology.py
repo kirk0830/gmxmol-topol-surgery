@@ -897,3 +897,74 @@ def resolve_parameter_tables(
                     )
                 )
     return missing
+
+
+def resolve_parameter_entries(
+    molecule: gml.SectionMol,
+    entries: Sequence[gml.EntryBonded],
+) -> list[tuple[str, int, tuple[int, ...]]]:
+    """Fill table parameters for selected rows without touching older rows.
+
+    ``gromologist`` resolves parameters by subsection. Temporarily restricting
+    the subsection to the requested entries keeps its lookup behavior while
+    ensuring an append operation cannot rewrite existing unparameterized rows.
+    """
+    parameter_headers = {
+        "bonds": "bondtypes",
+        "angles": "angletypes",
+        "dihedrals": "dihedraltypes",
+    }
+    selected: dict[str, list[gml.EntryBonded]] = {}
+    for entry in entries:
+        header = entry.subsection.header
+        if header in parameter_headers:
+            selected.setdefault(header, []).append(entry)
+    if not selected:
+        return []
+
+    try:
+        parameters = molecule.top.parameters
+    except RuntimeError:
+        parameters = None
+    available = (
+        set()
+        if parameters is None
+        else {subsection.header for subsection in parameters.subsections}
+    )
+
+    missing: list[tuple[str, int, tuple[int, ...]]] = []
+    for header, requested_entries in selected.items():
+        subsection = molecule.get_subsection(header)
+        original_entries = list(subsection.entries)
+        selected_ids = {id(entry) for entry in requested_entries}
+        resolved_entries: list[gml.EntryBonded] = requested_entries
+        subsection.entries = [
+            entry for entry in original_entries if id(entry) in selected_ids
+        ]
+        try:
+            if parameter_headers[header] in available:
+                molecule.add_ff_params(add_section=header)
+            resolved_entries = list(subsection.entries)
+        finally:
+            restored: list[gml.EntryBonded] = []
+            inserted = False
+            for entry in original_entries:
+                if id(entry) not in selected_ids:
+                    restored.append(entry)
+                elif not inserted:
+                    restored.extend(resolved_entries)
+                    inserted = True
+            if not inserted:
+                restored.extend(resolved_entries)
+            subsection.entries = restored
+
+        missing.extend(
+            (
+                header,
+                int(entry.interaction_type),
+                tuple(int(atom) for atom in entry.atom_numbers),
+            )
+            for entry in resolved_entries
+            if not entry.params_state_a
+        )
+    return missing

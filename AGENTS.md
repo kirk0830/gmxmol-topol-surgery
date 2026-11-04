@@ -1,10 +1,16 @@
 # AGENTS.md
 
+## Orchestrator Checkpoint
+
+Autonomous-run state (task ledger, dispatch history, model evaluations,
+pending decisions) lives in `.agent/CHECKPOINT.md`. After any context
+compaction, read that file first to restore progress before acting.
+
 ## Purpose
 
 `topolsurgery` is the shared, domain-neutral surgery layer for GROMACS
-topologies. It exists so `marap-eptido`, `reaxgmx`, and future callers do
-not reimplement connectivity edits, bonded-term repair, component
+topologies. It exists so downstream callers do not reimplement connectivity edits,
+bonded-term repair, component
 discovery, atom renumbering, and component export.
 
 The repository owns mechanisms, not chemistry policy.
@@ -94,7 +100,8 @@ The supported surfaces are:
   `from_snapshot`, `from_result`;
 - `TopologySurgery.graph`, `snapshot`, `atoms`, `interactions`, `components`,
   `bond_orders`, `clone`, `save`;
-- `TopologySurgery.cut_bond`, `connect_bond`, `remove_atoms`;
+- `TopologySurgery.cut_bond`, `connect_bond`, `remove_atoms`,
+  `add_interaction`;
 - `AtomicGraph` queries and immutable graph transformations;
 - `AtomSpec`, `AtomEdge`, `InteractionSpec`, `BondedTerm`,
   `ParameterRequest`, `GroFile`, `GroAtom`;
@@ -106,7 +113,7 @@ The supported surfaces are:
 Internal names beginning with `_` may change. Tests should exercise the
 public API whenever practical.
 
-Do not import `marap-eptido` or `reaxgmx` from library code. Provide generic
+Do not import downstream caller packages from library code. Provide generic
 records and document a conversion layer instead of creating package cycles.
 
 ## Parameters
@@ -176,3 +183,13 @@ of the contract.
 - Keep the dependency surface small. `gromologist` is the parser/writer;
   no chemistry toolkit should become mandatory.
 - Update `README.md` whenever a public signature or semantic changes.
+
+## Development Workflow
+
+Treat `main` as protected: never commit directly to it.
+
+1. Create a local branch from up-to-date `main` before starting work;
+   commit on that branch, never on `main`.
+2. Run `pixi run check` before pushing.
+3. Push the branch and open a pull request to `main`; land via review.
+4. Apply release tags on merged `main` only, then push the tag.
