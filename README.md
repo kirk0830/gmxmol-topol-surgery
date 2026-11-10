@@ -11,11 +11,11 @@ performs one connectivity edit at a time, repairs the bonded interaction
 records implied by that edit, finds the resulting component ownership
 groups, and exports each group as a matching `.gro` plus `.itp` or `.top`.
 
-The package is intended to be the shared low-level engine for
-`marap-eptido` and `reaxgmx`. Reaction mapping, cap chemistry, charge
-redistribution, atom retyping, and force-field policy remain in those
-packages. They can pass their atoms and records to this package and consume
-the edited topology, component map, graph, and structured diff.
+The package is intended to be a shared low-level engine for calling
+applications. Reaction mapping, cap chemistry, charge redistribution, atom
+retyping, and force-field policy remain in those callers. They can pass
+their atoms and records to this package and consume the edited topology,
+component map, graph, and structured diff.
 
 Current release boundary: one working topology must use one `nrexcl` value,
 must not contain system-level intermolecular interactions, and must not
@@ -45,7 +45,7 @@ without a local checkout:
 
 ```bash
 python -m pip install \
-  "topolsurgery @ git+https://github.com/kirk0830/gmxmol-topol-surgery.git@v0.5.0"
+  "topolsurgery @ git+https://github.com/kirk0830/gmxmol-topol-surgery.git@v0.6.0"
 ```
 
 Pixi can consume the same Git revision as a PyPI Git dependency:
@@ -53,10 +53,10 @@ Pixi can consume the same Git revision as a PyPI Git dependency:
 ```bash
 pixi add --pypi topolsurgery \
   --git https://github.com/kirk0830/gmxmol-topol-surgery.git \
-  --tag v0.5.0
+  --tag v0.6.0
 ```
 
-For integration against the moving default branch, replace `--tag v0.5.0`
+For integration against the moving default branch, replace `--tag v0.6.0`
 with `--branch main`. Tagged revisions are preferred for reproducible
 application environments. This Git dependency path avoids relying on local
 editable package installation inside a Pixi environment.
@@ -148,6 +148,7 @@ previous operation.
 | Copy a session | `clone()` | Independent session at the same state |
 | Cut one edge | `cut_bond(i, j)` | `SurgeryResult` |
 | Connect one edge | `connect_bond(i, j, ...)` | `SurgeryResult` |
+| Append one interaction row | `add_interaction(section, atoms, ...)` | `SurgeryResult` |
 | Remove atoms | `remove_atoms(atom_numbers)` | `AtomRemovalResult` |
 | Save combined topology | `save(path, format=None, molecule_name=None, overwrite=False)` | `pathlib.Path` |
 | Split into component files | `result.export(outdir, ...)` | `ExportResult` |
@@ -186,6 +187,73 @@ Do not inspect result/session fields beginning with `_`. In particular,
 | `resolve_parameters` | `bool = True` | Attempt parsed force-field table lookup for missing generated parameters. |
 | `parameter_resolver` | callable or `None` | Caller callback for every generated bond, angle, proper dihedral, and new pair. |
 | `parameter_overrides` | mapping or `None` | Exact atom-sequence terms, checked before the callback. Keys may use either endpoint/orientation order. |
+
+## `add_interaction`
+
+`add_interaction` appends caller-chosen interaction rows without touching
+connectivity. It exists for rows `connect_bond` never generates: impropers
+at newly formed sp2 centers, explicit pairs, or missing angles. Which atoms
+form an improper, its function, and its parameters are caller chemistry;
+this method only validates mechanism-level graph constraints and remains
+transactional on failure.
+
+```python
+from topolsurgery import BondedTerm
+
+result = surgery.add_interaction(
+    "dihedrals",
+    (5, 2, 1, 4),
+    function=2,
+    terms=BondedTerm(2, (180.0, 4.6024)),
+)
+```
+
+The atom order passed in `atoms` is preserved verbatim in the appended
+rows, including for impropers where the ordering is part of the chemistry.
+
+| Argument | Type/default | Meaning |
+|---|---|---|
+| `section` | `str` | One of `"angles"`, `"dihedrals"`, or `"pairs"`. |
+| `atoms` | sequence | Unique 1-based atoms in the appended row order. |
+| `function` | `int \| None = None` | Row function for graph validation and parameter lookup when `terms` is `None`. `None` follows the section's most common existing function (proper-only for dihedrals), then falls back to 1, 9, or 1. |
+| `terms` | `BondedTerm` or sequence, `None` | Explicit rows appended in order; bypasses parameter resolution. Multi-row sequences are function-9 dihedrals. |
+| `parameter_resolver` | callable or `None` | Caller callback consulted before topology templates when `terms` is `None`. |
+| `parameter_overrides` | mapping or `None` | Exact atom-sequence terms, checked before the callback under any equivalent ordering. |
+| `resolve_parameters` | `bool = True` | Attempt parsed force-field table lookup for missing parameters on the appended rows only. |
+
+Validation rules:
+
+- `bonds`, `constraints`, `settles`, `cmap`, `exclusions`, and any other
+  section are rejected with an error pointing at `connect_bond`; atom
+  counts must match the section arity and atoms must be unique and present.
+- Angles need both incident graph edges; proper dihedrals need all three
+  consecutive edges.
+- Improper dihedrals (functions 2 and 4) need no edges, but all four atoms
+  must lie in one connected component — the same condition under which
+  `cut_bond` preserves them.
+- Pairs must share one component. A pair whose graph distance is not 3 is
+  still added, with a non-blocking `pair_distance` warning, because
+  explicit pairs are not required to be 1-4 pairs.
+- Angles, pairs, and improper dihedrals are rejected when the same
+  canonical atom key and function already exist. Proper dihedrals may
+  accumulate multi-term rows. Function-9 multiplicities must be unique per
+  atom quartet and A/B state across calls; an exact duplicate row is rejected.
+
+When `terms` is omitted, parameters follow the same precedence chain as
+`connect_bond`: `parameter_overrides`, then `parameter_resolver`, then
+explicit templates from the parsed topology, then parsed force-field tables
+(when `resolve_parameters` is true), and finally an unparameterized row plus
+an `unresolved_parameter` warning. Resolver requests carry the canonical
+atom ordering and `default_function` — the explicit `function` or the
+section default — so `default_function` 2 or 4 marks an improper request.
+Because improper chemistry is caller policy, improper parameters come from
+terms, overrides, or a resolver; the topology-template layer indexes proper
+torsions only. Table resolution is scoped to rows appended by this call and
+does not fill older unparameterized rows.
+
+The graph, components, and bond orders are unchanged. The result reports
+`operation="add"`, the appended rows in `edit.created`, and `atom_pair` as
+the lowest and highest atom of the appended interaction.
 
 ## Graph API
 
@@ -460,12 +528,13 @@ members is removed. SETTLE therefore never survives with missing atoms.
 
 ## Result Objects and Warnings
 
-A `SurgeryResult` represents the state immediately after one cut or connect:
+A `SurgeryResult` represents the state immediately after one cut, connect,
+or `add_interaction` append:
 
 | Field/property | Meaning |
 |---|---|
-| `operation` | `"cut"` or `"connect"`. |
-| `atom_pair` | Canonical ascending 1-based atom pair in the working topology. |
+| `operation` | `"cut"`, `"connect"`, or `"add"`. |
+| `atom_pair` | Canonical ascending 1-based atom pair; for `"add"`, the lowest and highest atom of the appended interaction. |
 | `components` | Ordered `Component` ownership groups. |
 | `component_count` | Number of ownership groups. |
 | `warnings` | Generated `SurgeryWarning` records; warnings do not imply an exception. |
@@ -515,79 +584,9 @@ With coordinates attached, TOP/GRO residue names and atom names are checked
 by default. Pass `validate_structure=False` only when the caller has already
 proven a valid atom correspondence.
 
-## Integrating `marap-eptido`
-
-`marap-eptido` can convert its `MolecularTopology` records to `AtomSpec`
-and `InteractionSpec`, shifting any 0-based chemistry indices to the 1-based
-surface used by surgery:
-
-```python
-atoms = [
-    AtomSpec(
-        number=atom.num,
-        atom_type=atom.ff_atomtype,
-        atom_name=atom.name,
-        residue_number=atom.resnum,
-        residue_name=atom.res_name,
-        charge_group=atom.num,
-        charge=atom.charge,
-        mass=0.0 if atom.mass is None else atom.mass,
-    )
-    for atom in molecular_topology.atoms
-]
-
-interactions = []
-for bond in molecular_topology.bonds:
-    interactions.append(InteractionSpec("bonds", (bond.i, bond.j), bond.func))
-# Add angles, impropers, and pairs in the same way.
-```
-
-The caller keeps its family registry, cap stripping policy, charge merge,
-and improper/completeness rules. It replaces its local bond/angle/dihedral
-graph repair and numbering implementation with `TopologySurgery`.
-
-## Integrating `reaxgmx`
-
-Convert each `MoleculeTopology` at the reaction-topology boundary:
-
-```python
-atoms = tuple(
-    AtomSpec(
-        number=number,
-        atom_type=data["type"],
-        atom_name=data.get("atom", data["type"]),
-        residue_number=data.get("resi", 1),
-        residue_name=data.get("res", "MOL"),
-        charge_group=data.get("cgnr", number),
-        charge=data.get("charge", 0.0),
-        mass=data.get("mass", 0.0),
-    )
-    for number, data in molecule.atoms.items()
-)
-
-surgery = TopologySurgery.from_records(
-    atoms,
-    existing_interactions,
-    name=molecule.name,
-    nrexcl=molecule.nrexcl,
-)
-
-product = surgery.connect_bond(
-    ai,
-    aj,
-    bond_parameters=(r, k),
-    bond_function=funct,
-)
-```
-
-Reaction mapping, AK-atom selection, atomtype changes, and candidate
-geometry remain in `reaxgmx`. Atom deletion, connectivity repair,
-component discovery, and renumbered topology output come from this package.
-
 ## Downstream Integration Checklist
 
-For `marap-eptido`, `reaxgmx`, or another caller, the normal integration
-sequence is:
+For any calling package, the normal integration sequence is:
 
 1. Convert package-native atoms and interactions to contiguous 1-based
    `AtomSpec`/`InteractionSpec` records, or pass a parsed
@@ -595,9 +594,10 @@ sequence is:
 2. Construct one `TopologySurgery` session. Keep chemistry decisions such as
    atom typing, cap policy, charge redistribution, and improper rules in the
    caller.
-3. Run exactly one of `cut_bond`, `connect_bond`, or `remove_atoms`.
-4. Inspect `result.warnings`. Treat them as fatal unless the caller has an
-   explicit downstream parameter policy.
+3. Run exactly one of `cut_bond`, `connect_bond`, `add_interaction`, or
+   `remove_atoms`.
+4. Inspect `result.warnings`. Treat warnings with `blocking=True` as fatal
+   unless the caller has an explicit downstream parameter policy.
 5. Preserve `result.edit` if reaction provenance is required.
 6. Either `session.save(...)` the combined topology or call
    `result.export(...)`/`result.component_snapshots()` to split ownership
@@ -614,14 +614,18 @@ result = session.connect_bond(
     bond_parameters=(0.153, 251040.0),
     bond_order=1,
 )
-if result.warnings:
+blocking_warnings = [warning for warning in result.warnings if warning.blocking]
+if blocking_warnings:
     raise RuntimeError(
         "topology has unresolved parameters: "
-        + "; ".join(str(warning) for warning in result.warnings)
+        + "; ".join(str(warning) for warning in blocking_warnings)
     )
 
 files = result.export("products", format="itp", prefix="product")
 ```
+
+Non-blocking warnings, such as an explicitly added pair at a graph distance
+other than three, are informational and do not fail this gate.
 
 Use `session.clone()` before speculative edits and
 `TopologySurgery.from_result(result)` to branch from a completed result.

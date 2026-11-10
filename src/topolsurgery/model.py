@@ -14,8 +14,8 @@ if TYPE_CHECKING:
     from topolsurgery.graph import AtomicGraph
     from topolsurgery.gro import GroFile
 
-EditOperation = Literal["cut", "connect", "remove_atoms"]
-SurgeryOperation = Literal["cut", "connect"]
+EditOperation = Literal["cut", "connect", "remove_atoms", "add"]
+SurgeryOperation = Literal["cut", "connect", "add"]
 OutputFormat = Literal["itp", "top"]
 InteractionKind = Literal[
     "bonds",
@@ -544,7 +544,7 @@ class TopologyEdit:
 
     def __post_init__(self) -> None:
         """Validate one public structural edit record."""
-        if self.operation not in ("cut", "connect", "remove_atoms"):
+        if self.operation not in ("cut", "connect", "remove_atoms", "add"):
             raise ValueError(f"unknown topology edit operation {self.operation!r}")
         atoms = _validate_atom_numbers(
             self.atoms,
@@ -555,6 +555,8 @@ class TopologyEdit:
             raise ValueError(
                 "cut/connect topology edits must reference exactly two atoms"
             )
+        if self.operation == "add" and len(atoms) not in (2, 3, 4):
+            raise ValueError("add topology edits must reference two to four atoms")
         created = tuple(self.created)
         removed = tuple(self.removed)
         if any(not isinstance(item, InteractionSpec) for item in created + removed):
@@ -803,10 +805,12 @@ class SurgeryResult(_TopologyResultMixin):
 
     Attributes
     ----------
-    operation : Literal["cut", "connect"]
-        The operation that produced this partition.
+    operation : Literal["cut", "connect", "add"]
+        The operation that produced this result.
     atom_pair : tuple[int, int]
         The requested 1-based atom pair, normalized to ascending order.
+        For ``"add"`` operations, the lowest and highest atom numbers of
+        the appended interaction.
     components : tuple[Component, ...]
         Component ownership groups after the operation.
     warnings : tuple[SurgeryWarning, ...]
